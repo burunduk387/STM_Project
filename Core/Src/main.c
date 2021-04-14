@@ -107,6 +107,49 @@ char* itoa(int value, char* result, int base)
 	return result;
 	
 }
+
+uint32_t ADC_Read_CH0(void)
+{
+	uint32_t res;	
+	ADC_Select_CH0();
+	HAL_ADC_Start(&hadc1);
+	HAL_ADC_PollForConversion(&hadc1, 100);
+	res = HAL_ADC_GetValue(&hadc1);
+	HAL_ADC_Stop(&hadc1);	
+	return res; 
+}
+
+uint32_t ADC_Read_CH1(void)
+{
+	uint32_t res;	
+	ADC_Select_CH1();
+	HAL_ADC_Start(&hadc1);
+	HAL_ADC_PollForConversion(&hadc1, 100);
+	res = HAL_ADC_GetValue(&hadc1);
+	HAL_ADC_Stop(&hadc1);	
+	return res; 
+}
+
+uint32_t Get_uS(void) 
+{
+	uint32_t usTicks = HAL_RCC_GetSysClockFreq() / 1000000;
+	register uint32_t ms, cycle_cnt;
+	do 
+	{
+		ms = HAL_GetTick();
+		cycle_cnt = SysTick->VAL;
+	}
+	while (ms != HAL_GetTick());
+	return (ms * 1000) + (usTicks * 1000 - cycle_cnt) / usTicks;
+}
+void Delay_uS(uint16_t micros) 
+{
+	uint32_t start = Get_uS();
+	while (Get_uS()-start < (uint32_t) micros)
+	{
+		__asm("nop");
+	}
+}
 /* USER CODE END 0 */
 
 /**
@@ -148,27 +191,20 @@ int main(void)
   while (1)
   {
 
-		ADC_Select_CH0();
-		HAL_ADC_Start(&hadc1);
-		HAL_ADC_PollForConversion(&hadc1, 100);
-		JS[0] = HAL_ADC_GetValue(&hadc1);
-		HAL_ADC_Stop(&hadc1);	
+
+		JS[0] = ADC_Read_CH0();
 		itoa(JS[0], x_val, 10);
 		strcat(x_val, "X");
 		CDC_Transmit_FS((uint8_t*) x_val, strlen(x_val));
 		
-		HAL_Delay(1);
+		Delay_uS(55);
 		
-		ADC_Select_CH1();
-		HAL_ADC_Start(&hadc1);
-		HAL_ADC_PollForConversion(&hadc1, 100);
-		JS[1] = HAL_ADC_GetValue(&hadc1);
-		HAL_ADC_Stop(&hadc1);
+		JS[1] = ADC_Read_CH1();
 		itoa(JS[1], y_val, 10);
 		strcat(y_val, "Y\n");
 		CDC_Transmit_FS((uint8_t*) y_val, strlen(y_val));
 		
-		HAL_Delay(1);
+		Delay_uS(55);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
