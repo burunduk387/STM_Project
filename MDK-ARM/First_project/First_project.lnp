@@ -3,6 +3,7 @@
 "first_project\main.o"
 "first_project\gpio.o"
 "first_project\adc.o"
+"first_project\tim.o"
 "first_project\stm32f1xx_it.o"
 "first_project\stm32f1xx_hal_msp.o"
 "first_project\usb_device.o"
