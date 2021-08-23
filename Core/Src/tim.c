@@ -139,10 +139,10 @@ void HAL_TIM_Encoder_MspInit(TIM_HandleTypeDef* tim_encoderHandle)
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     HAL_GPIO_Init(ENC1_CH1_GPIO_Port, &GPIO_InitStruct);
 
-    GPIO_InitStruct.Pin = ENC2_CH2B3_Pin;
+    GPIO_InitStruct.Pin = ENC1_CH2_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
-    HAL_GPIO_Init(ENC2_CH2B3_GPIO_Port, &GPIO_InitStruct);
+    HAL_GPIO_Init(ENC1_CH2_GPIO_Port, &GPIO_InitStruct);
 
     __HAL_AFIO_REMAP_TIM2_PARTIAL_1();
 
@@ -191,7 +191,7 @@ void HAL_TIM_Encoder_MspDeInit(TIM_HandleTypeDef* tim_encoderHandle)
     */
     HAL_GPIO_DeInit(ENC1_CH1_GPIO_Port, ENC1_CH1_Pin);
 
-    HAL_GPIO_DeInit(ENC2_CH2B3_GPIO_Port, ENC2_CH2B3_Pin);
+    HAL_GPIO_DeInit(ENC1_CH2_GPIO_Port, ENC1_CH2_Pin);
 
   /* USER CODE BEGIN TIM2_MspDeInit 1 */
 

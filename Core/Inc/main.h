@@ -60,6 +60,8 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define PC_Pin GPIO_PIN_13
 #define PC_GPIO_Port GPIOC
+#define F_Pin GPIO_PIN_15
+#define F_GPIO_Port GPIOC
 #define FR_Pin GPIO_PIN_2
 #define FR_GPIO_Port GPIOA
 #define FL_Pin GPIO_PIN_3
@@ -98,8 +100,8 @@ void Error_Handler(void);
 #define DIR4_GPIO_Port GPIOA
 #define ENC1_CH1_Pin GPIO_PIN_15
 #define ENC1_CH1_GPIO_Port GPIOA
-#define ENC2_CH2B3_Pin GPIO_PIN_3
-#define ENC2_CH2B3_GPIO_Port GPIOB
+#define ENC1_CH2_Pin GPIO_PIN_3
+#define ENC1_CH2_GPIO_Port GPIOB
 #define ST3_Pin GPIO_PIN_4
 #define ST3_GPIO_Port GPIOB
 #define DIR3_Pin GPIO_PIN_5

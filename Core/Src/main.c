@@ -53,14 +53,14 @@ struct Cal
 	int32_t diff;
 };
 
-int32_t JS[2];
-int64_t Spd;
+int32_t JS[2], Cur_ENC1, Prev_ENC1, Delta_ENC1, Cur_ENC2, Prev_ENC2, Delta_ENC2;
+uint32_t Spd, Nstep;
+uint8_t i;
+extern uint8_t* buffer[64];
+extern uint32_t len;
+char *ok = "OK\n";
+char *done = "DONE\n";
 struct Cal JS_Cal_X, JS_Cal_Y;
-char x_val[6] = "";
-char y_val[6] = "";
-char sender[14] ="";
-
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -71,6 +71,45 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+uint32_t DWT_Delay_Init(void)
+{
+    /* Disable TRC */
+    CoreDebug->DEMCR &= ~CoreDebug_DEMCR_TRCENA_Msk; // ~0x01000000;
+    /* Enable TRC */
+    CoreDebug->DEMCR |=  CoreDebug_DEMCR_TRCENA_Msk; // 0x01000000;
+ 
+    /* Disable clock cycle counter */
+    DWT->CTRL &= ~DWT_CTRL_CYCCNTENA_Msk; //~0x00000001;
+    /* Enable  clock cycle counter */
+    DWT->CTRL |=  DWT_CTRL_CYCCNTENA_Msk; //0x00000001;
+ 
+    /* Reset the clock cycle counter value */
+    DWT->CYCCNT = 0;
+ 
+    /* 3 NO OPERATION instructions */
+    __ASM volatile ("NOP");
+    __ASM volatile ("NOP");
+    __ASM volatile ("NOP");
+ 
+    /* Check if clock cycle counter has started */
+    if(DWT->CYCCNT)
+    {
+       return 0; /*clock cycle counter started*/
+    }
+    else
+    {
+      return 1; /*clock cycle counter not started*/
+    }
+}
+
+__STATIC_INLINE void DWT_Delay_us(volatile uint32_t au32_microseconds)
+{
+  uint32_t au32_initial_ticks = DWT->CYCCNT;
+  uint32_t au32_ticks = (HAL_RCC_GetHCLKFreq() / 1000000);
+  au32_microseconds *= au32_ticks;
+  while ((DWT->CYCCNT - au32_initial_ticks) < au32_microseconds-au32_ticks);
+}
+
 void ADC_Select_CH0 (void)
 {
 	ADC_ChannelConfTypeDef sConfig = {0};
@@ -139,28 +178,6 @@ int32_t ADC_Read_CH1(void)
 	return res; 
 }
 
-uint32_t Get_uS(void) 
-{
-	uint32_t usTicks = HAL_RCC_GetSysClockFreq() / 1000000;
-	register uint32_t ms, cycle_cnt;
-	do 
-	{
-		ms = HAL_GetTick();
-		cycle_cnt = SysTick->VAL;
-	}
-	while (ms != HAL_GetTick());
-	return (ms * 1000) + (usTicks * 1000 - cycle_cnt) / usTicks;
-}
-
-void Delay_uS(uint16_t micros) 
-{
-	uint32_t start = Get_uS();
-	while (Get_uS()-start < (uint32_t) micros)
-	{
-		__asm("nop");
-	}
-}
-
 float min(float x, float y)
 {
     if (x <= y)
@@ -175,7 +192,7 @@ float min(float x, float y)
 
 float max(float x, float y)
 {
-    if (x > y)
+    if (x >= y)
 		{
         return x;
 		}
@@ -183,6 +200,50 @@ float max(float x, float y)
 		{
         return y;
 		}
+}
+uint32_t to_num(uint8_t* num)
+{
+	if (num == "0")
+	{
+		return 0;
+	}
+	if (num == "1")
+	{
+		return 1;
+	}
+	if (num == "2")
+	{
+		return 2;
+	}
+	if (num == "3")
+	{
+		return 3;
+	}
+	if (num == "4")
+	{
+		return 4;
+	}
+	if (num == "5")
+	{
+		return 5;
+	}
+	if (num == "6")
+	{
+		return 6;
+	}
+		if (num == "7")
+	{
+		return 7;
+	}
+		if (num == "8")
+	{
+		return 8;
+	}
+		if (num == "9")
+	{
+		return 9;
+	}
+	return 0;
 }
 struct Cal JS_Calibration(int CH)
 {
@@ -192,7 +253,7 @@ struct Cal JS_Calibration(int CH)
 	if (CH == 0)
 	{
 		ADC_Select_CH0();
-		for (i=0; i<100; i++)
+		for (i=0; i<1000; i++)
 		{
 		HAL_ADC_Start(&hadc1);
 		HAL_ADC_PollForConversion(&hadc1, 100);
@@ -201,15 +262,15 @@ struct Cal JS_Calibration(int CH)
 		mini = min(rn, mini);
 		maxi = max(rn ,maxi);
 		}
-		res.mean /= 100;
+		res.mean /= 1000;
 		HAL_ADC_Stop(&hadc1);	
-		res.diff = max(res.mean - mini, maxi - res.mean);
+		res.diff = max(res.mean - mini, maxi - res.mean) + 16;
 
 	}
 	else
 	{
 		ADC_Select_CH1();
-		for (i=0; i<100; i++)
+		for (i=0; i<1000; i++)
 		{
 		HAL_ADC_Start(&hadc1);
 		HAL_ADC_PollForConversion(&hadc1, 100);
@@ -218,9 +279,9 @@ struct Cal JS_Calibration(int CH)
 		mini = min(rn, mini);
 		maxi = max(rn ,maxi);
 		}
-		res.mean /= 100;
+		res.mean /= 1000;
 		HAL_ADC_Stop(&hadc1);	
-		res.diff = max(res.mean - mini, maxi - res.mean);
+		res.diff = max(res.mean - mini, maxi - res.mean) + 16;
 
 	}
 	return res; 
@@ -235,7 +296,8 @@ struct Cal JS_Calibration(int CH)
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
+	len = 0;
+	memset(buffer, '\0', 64); 
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -260,85 +322,320 @@ int main(void)
   MX_TIM3_Init();
   MX_ADC1_Init();
   MX_USB_DEVICE_Init();
+  /* USER CODE BEGIN 2 */
+	HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
+	Prev_ENC1 = 32767 - ((__HAL_TIM_GET_COUNTER(&htim2) - 1) & 0xFFFF);
+	
+	HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
+	Prev_ENC2 = 32767 - ((__HAL_TIM_GET_COUNTER(&htim3) - 1) & 0xFFFF);
+	
+	DWT_Delay_Init();
+		
 	JS_Cal_X = JS_Calibration(0);
 	JS_Cal_Y = JS_Calibration(1);
-  /* USER CODE BEGIN 2 */
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+	uint8_t* alphabet[7];
+	alphabet[0] = (uint8_t*) "";
+	if (HAL_GPIO_ReadPin(PC_GPIO_Port, PC_Pin))
+	{
+		while (1)
+		{
+		HAL_Delay(1000);
+		if (buffer[0] == alphabet[0])
+		{
+		CDC_Transmit_FS((uint8_t * ) done, strlen(done));
+		HAL_Delay(500);
+		}
+		CDC_Transmit_FS((uint8_t * ) buffer[0], 1);
+		HAL_Delay(500);
+		CDC_Transmit_FS((uint8_t * ) ok, strlen(ok));
+		HAL_Delay(500);
+		if (buffer[0] != alphabet[0])
+		{
+		CDC_Transmit_FS((uint8_t * ) ok, strlen(ok));
+		}
+		if (buffer[0] == alphabet[0])
+		{
+    CDC_Transmit_FS((uint8_t * ) ok, strlen(ok));
+    if (buffer[1] == (uint8_t * )
+      "E") {
+      CDC_Transmit_FS(buffer[1], 1);
+      if (buffer[2] == (uint8_t * )
+        "+") {
+        CDC_Transmit_FS(buffer[2], 1);
+        if (buffer[3] == (uint8_t * )
+          "D") {
+          CDC_Transmit_FS(buffer[3], 1);
+          CDC_Transmit_FS((uint8_t * ) ok, strlen(ok));
+        }
+      }
+      if (buffer[2] == (uint8_t * )
+        "-") {
+        CDC_Transmit_FS(buffer[2], 1);
+        if (buffer[3] == (uint8_t * )
+          "D") {
+          CDC_Transmit_FS(buffer[3], 1);
+          CDC_Transmit_FS((uint8_t * ) ok, strlen(ok));
+        }
+      }
+    }
+    if (buffer[1] == (uint8_t * )
+      "F") {
+      CDC_Transmit_FS(buffer[1], 1);
+      if (buffer[2] == (uint8_t * )
+        "+") {
+        CDC_Transmit_FS(buffer[2], 1);
+        if (buffer[9] == (uint8_t * )
+          "D") {
+          CDC_Transmit_FS(buffer[3], 1);
+          CDC_Transmit_FS(buffer[4], 1);
+          CDC_Transmit_FS(buffer[5], 1);
+          CDC_Transmit_FS(buffer[6], 1);
+          CDC_Transmit_FS(buffer[7], 1);
+          CDC_Transmit_FS(buffer[8], 1);
+          CDC_Transmit_FS(buffer[9], 1);
+          CDC_Transmit_FS((uint8_t * ) ok, strlen(ok));
+          Nstep = (uint32_t)(100000 * to_num(buffer[3]) +
+            10000 * to_num(buffer[4]) + 1000 * to_num(buffer[5]) +
+            100 * to_num(buffer[6]) + 10 * to_num(buffer[7]) + to_num(buffer[8]));
+        }
+      }
+      if (buffer[2] == (uint8_t * )
+        "-") {
+        CDC_Transmit_FS(buffer[2], 1);
+        if (buffer[9] == (uint8_t * )
+          "D") {
+          CDC_Transmit_FS(buffer[3], 1);
+          CDC_Transmit_FS(buffer[4], 1);
+          CDC_Transmit_FS(buffer[5], 1);
+          CDC_Transmit_FS(buffer[6], 1);
+          CDC_Transmit_FS(buffer[7], 1);
+          CDC_Transmit_FS(buffer[8], 1);
+          CDC_Transmit_FS(buffer[9], 1);
+          CDC_Transmit_FS((uint8_t * ) ok, strlen(ok));
+          Nstep = (uint32_t)(100000 * to_num(buffer[3]) +
+            10000 * to_num(buffer[4]) + 1000 * to_num(buffer[5]) +
+            100 * to_num(buffer[6]) + 10 * to_num(buffer[7]) + to_num(buffer[8]));
+        }
+      }
+    }
+  }
+
+}
 	
+
+		
+	}
+	else
+	{
   while (1)
   {
-
-		JS[0] = ADC_Read_CH0() - JS_Cal_X.mean;
-		//itoa(JS[0], x_val, 10);
-		//strcat(x_val, "X");
-		//CDC_Transmit_FS((uint8_t*) x_val, strlen(x_val));
-		//Delay_uS(75);
 		
+		//XY
+		JS[0] = ADC_Read_CH0() - JS_Cal_X.mean;
 		JS[1] = ADC_Read_CH1() - JS_Cal_Y.mean;
-		//itoa(JS[1], y_val, 10);
-		//strcat(y_val, "Y\n");
-		//CDC_Transmit_FS((uint8_t*) y_val, strlen(y_val));
-		//Delay_uS(75);
-		if (abs(JS[0]) > JS_Cal_X.diff + 70)
+		if (abs(JS[0]) > JS_Cal_X.diff)
 		{
 			if (JS[0] > 0) 
 			{
 				HAL_GPIO_WritePin(GPIOB, DIR1_Pin, GPIO_PIN_SET);
-				Spd = (int64_t) (1300 - 1280 * JS[0] / 2048);
+				Spd = (uint32_t) (1300 - 1280 * JS[0] / 2048);
 				HAL_GPIO_WritePin(GPIOB, ST1_Pin, GPIO_PIN_SET);
-				Delay_uS(Spd);
+				DWT_Delay_us(Spd);
 				HAL_GPIO_WritePin(GPIOB, ST1_Pin, GPIO_PIN_RESET);
-				Delay_uS(Spd);
 			}
 			else
 			{
 				HAL_GPIO_WritePin(GPIOB, DIR1_Pin, GPIO_PIN_RESET);
-				Spd = (int64_t) (1300 - 1280 * abs(JS[0]) / 2048);
+				Spd = (uint32_t) (1300 + 1280 * JS[0] / 2048);
 				HAL_GPIO_WritePin(GPIOB, ST1_Pin, GPIO_PIN_SET);
-				Delay_uS(Spd);
+				DWT_Delay_us(Spd);
 				HAL_GPIO_WritePin(GPIOB, ST1_Pin, GPIO_PIN_RESET);
-				Delay_uS(Spd);
 			}
 		}
-		if (abs(JS[1]) > JS_Cal_Y.diff + 70)
+	  if (abs(JS[1]) > JS_Cal_Y.diff)
 		{
 			if (JS[1] > 0) 
 			{
 				HAL_GPIO_WritePin(GPIOB, DIR2_Pin, GPIO_PIN_SET);
-				Spd = (int64_t) (2500 - 2300 * JS[1] / 2048);
+				Spd = (uint32_t) (2500 - 2300 * JS[1] / 2048);
 				HAL_GPIO_WritePin(GPIOB, ST2_Pin, GPIO_PIN_SET);
-				Delay_uS(Spd);
+				DWT_Delay_us(Spd);
 				HAL_GPIO_WritePin(GPIOB, ST2_Pin, GPIO_PIN_RESET);
-				Delay_uS(Spd);
 			}
 			else
 			{
 				HAL_GPIO_WritePin(GPIOB, DIR2_Pin, GPIO_PIN_RESET);
-				Spd = (int64_t) (2500 - 2300 * abs(JS[1]) / 2048);
+				Spd = (uint32_t) (2500 - 2300 * abs(JS[1]) / 2048);
 				HAL_GPIO_WritePin(GPIOB, ST2_Pin, GPIO_PIN_SET);
-				Delay_uS(Spd);
+				DWT_Delay_us(Spd);
 				HAL_GPIO_WritePin(GPIOB, ST2_Pin, GPIO_PIN_RESET);
-				Delay_uS(Spd);
 			}
 		}
 		
-			
-	
-	//HAL_GPIO_WritePin(GPIOB, DIR1_Pin, GPIO_PIN_RESET);
-	//Spd = (int64_t) (400.0);
-  //HAL_GPIO_WritePin(GPIOB, ST1_Pin, GPIO_PIN_SET);
-	//Delay_uS(Spd);
-	//HAL_GPIO_WritePin(GPIOB, ST1_Pin, GPIO_PIN_RESET);
-	//Delay_uS(Spd);
+		//Z
+		Cur_ENC1 = 32767 - ((__HAL_TIM_GET_COUNTER(&htim2) - 1) & 0xFFFF);
+		if (Cur_ENC1 > 16384) 
+		{
+			Cur_ENC1 = Cur_ENC1 - 32768;
+		}
+		if (Cur_ENC1 != Prev_ENC1)
+		{
+			Delta_ENC1 = Cur_ENC1 - Prev_ENC1;
+			if (Delta_ENC1 > 0)
+			{
+				HAL_GPIO_WritePin(GPIOB, DIR3_Pin, GPIO_PIN_RESET);
+				HAL_GPIO_WritePin(GPIOB, ST3_Pin, GPIO_PIN_SET);
+				DWT_Delay_us(100);
+				HAL_GPIO_WritePin(GPIOB, ST3_Pin, GPIO_PIN_RESET);
+				DWT_Delay_us(100);
+				HAL_GPIO_WritePin(GPIOB, ST3_Pin, GPIO_PIN_SET);
+				DWT_Delay_us(100);
+				HAL_GPIO_WritePin(GPIOB, ST3_Pin, GPIO_PIN_RESET);
+				HAL_GPIO_WritePin(GPIOB, ST3_Pin, GPIO_PIN_SET);
+				DWT_Delay_us(100);
+				HAL_GPIO_WritePin(GPIOB, ST3_Pin, GPIO_PIN_RESET);
+				DWT_Delay_us(100);
+				HAL_GPIO_WritePin(GPIOB, ST3_Pin, GPIO_PIN_SET);
+				DWT_Delay_us(100);
+				HAL_GPIO_WritePin(GPIOB, ST3_Pin, GPIO_PIN_RESET);
+			}
+						if (Delta_ENC1 < 0)
+			{
+				HAL_GPIO_WritePin(GPIOB, DIR3_Pin, GPIO_PIN_SET);
+				HAL_GPIO_WritePin(GPIOB, ST3_Pin, GPIO_PIN_SET);
+				DWT_Delay_us(100);
+				HAL_GPIO_WritePin(GPIOB, ST3_Pin, GPIO_PIN_RESET);
+				DWT_Delay_us(100);
+				HAL_GPIO_WritePin(GPIOB, ST3_Pin, GPIO_PIN_SET);
+				DWT_Delay_us(100);
+				HAL_GPIO_WritePin(GPIOB, ST3_Pin, GPIO_PIN_RESET);
+				HAL_GPIO_WritePin(GPIOB, ST3_Pin, GPIO_PIN_SET);
+				DWT_Delay_us(100);
+				HAL_GPIO_WritePin(GPIOB, ST3_Pin, GPIO_PIN_RESET);
+				DWT_Delay_us(100);
+				HAL_GPIO_WritePin(GPIOB, ST3_Pin, GPIO_PIN_SET);
+				DWT_Delay_us(100);
+				HAL_GPIO_WritePin(GPIOB, ST3_Pin, GPIO_PIN_RESET);
+			}
+		}
+		Prev_ENC1 = Cur_ENC1;
+		
+		Cur_ENC2 = 32767 - ((__HAL_TIM_GET_COUNTER(&htim3) - 1) & 0xFFFF);
+		
+		//PHI
+		if (HAL_GPIO_ReadPin(F_GPIO_Port, F_Pin))
+		{
+			if (Cur_ENC2 > 16384) 
+			{
+				Cur_ENC2 = Cur_ENC2 - 32768;
+			}
+			if (Cur_ENC2 != Prev_ENC2)
+			{
+				Delta_ENC2 = Cur_ENC2 - Prev_ENC2;
+				if (Delta_ENC2 > 0)
+				{
+					HAL_GPIO_WritePin(GPIOA, DIR4_Pin, GPIO_PIN_RESET);
+					HAL_GPIO_WritePin(GPIOA, ST4_Pin, GPIO_PIN_SET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOA, ST4_Pin, GPIO_PIN_RESET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOA, ST4_Pin, GPIO_PIN_SET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOA, ST4_Pin, GPIO_PIN_RESET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOA, ST4_Pin, GPIO_PIN_SET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOA, ST4_Pin, GPIO_PIN_RESET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOA, ST4_Pin, GPIO_PIN_SET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOA, ST4_Pin, GPIO_PIN_RESET);
+				}
+							if (Delta_ENC2 < 0)
+				{
+					HAL_GPIO_WritePin(GPIOA, DIR4_Pin, GPIO_PIN_SET);
+					HAL_GPIO_WritePin(GPIOA, ST4_Pin, GPIO_PIN_SET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOA, ST4_Pin, GPIO_PIN_RESET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOA, ST4_Pin, GPIO_PIN_SET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOA, ST4_Pin, GPIO_PIN_RESET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOA, ST4_Pin, GPIO_PIN_SET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOA, ST4_Pin, GPIO_PIN_RESET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOA, ST4_Pin, GPIO_PIN_SET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOA, ST4_Pin, GPIO_PIN_RESET);
+				}
+			}
+		}
+		
+		//FOCUS
+		
+	  else 
+		{
+			if (Cur_ENC2 > 16384) 
+			{
+				Cur_ENC2 = Cur_ENC2 - 32768;
+			}
+			if (Cur_ENC2 != Prev_ENC2)
+			{
+				Delta_ENC2 = Cur_ENC2 - Prev_ENC2;
+				if (Delta_ENC2 > 0)
+				{
+					HAL_GPIO_WritePin(GPIOA, DIR5_Pin, GPIO_PIN_RESET);
+					HAL_GPIO_WritePin(GPIOB, ST5_Pin, GPIO_PIN_SET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOB, ST5_Pin, GPIO_PIN_RESET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOB, ST5_Pin, GPIO_PIN_SET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOB, ST5_Pin, GPIO_PIN_RESET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOB, ST5_Pin, GPIO_PIN_SET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOB, ST5_Pin, GPIO_PIN_RESET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOB, ST5_Pin, GPIO_PIN_SET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOB, ST5_Pin, GPIO_PIN_RESET);
+				}
+							if (Delta_ENC2 < 0)
+				{
+					HAL_GPIO_WritePin(GPIOA, DIR5_Pin, GPIO_PIN_SET);
+					HAL_GPIO_WritePin(GPIOB, ST5_Pin, GPIO_PIN_SET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOB, ST5_Pin, GPIO_PIN_RESET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOB, ST5_Pin, GPIO_PIN_SET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOB, ST5_Pin, GPIO_PIN_RESET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOB, ST5_Pin, GPIO_PIN_SET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOB, ST5_Pin, GPIO_PIN_RESET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOB, ST5_Pin, GPIO_PIN_SET);
+					DWT_Delay_us(200);
+					HAL_GPIO_WritePin(GPIOB, ST5_Pin, GPIO_PIN_RESET);
+				}
+			}
+		}
+		
+		Prev_ENC2 = Cur_ENC2;
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
+}
 }
 
 /**
